@@ -79,6 +79,51 @@ def create_win32api_excel(output_path: Path, vba_code: str) -> None:
     print(f"Created Win32 API Excel file: {output_path}")
 
 
+def verify_vba_in_file(xlsm_path: Path) -> None:
+    """Verify VBA code was injected and display summary."""
+    print(f"\n--- Verifying: {xlsm_path.name} ---")
+
+    if not xlsm_path.exists():
+        print(f"  ERROR: File not found")
+        return
+
+    print(f"  File size: {xlsm_path.stat().st_size} bytes")
+
+    try:
+        with ExcelFile(str(xlsm_path)) as wb:
+            modules = wb.module_names()
+            print(f"  Modules: {modules}")
+
+            for module_name in modules:
+                try:
+                    source = wb.get_module(module_name)
+                    lines = source.strip().split("\n")
+                    print(f"\n  [{module_name}] ({len(lines)} lines)")
+
+                    # Check for Win32 API declarations
+                    declare_count = sum(1 for line in lines if "Declare" in line)
+                    function_count = sum(1 for line in lines if line.strip().startswith(("Public Function", "Public Sub", "Private Function", "Private Sub")))
+
+                    if declare_count > 0:
+                        print(f"    Win32 API Declarations: {declare_count}")
+                    if function_count > 0:
+                        print(f"    Functions/Subs: {function_count}")
+
+                    # Show first few lines
+                    print("    Preview:")
+                    for line in lines[:5]:
+                        if line.strip():
+                            print(f"      {line[:60]}{'...' if len(line) > 60 else ''}")
+                    if len(lines) > 5:
+                        print(f"      ... ({len(lines) - 5} more lines)")
+
+                except Exception as e:
+                    print(f"    Could not read: {e}")
+
+    except Exception as e:
+        print(f"  ERROR reading file: {e}")
+
+
 def main():
     # Paths
     project_root = Path(__file__).parent.parent
@@ -86,7 +131,9 @@ def main():
     output_dir.mkdir(exist_ok=True)
 
     # Create basic VBA Excel file
-    print("=== Creating basic VBA Excel file ===")
+    print("=" * 50)
+    print("Creating basic VBA Excel file")
+    print("=" * 50)
     vba_path = project_root / "vba" / "sample_module.bas"
     output_xlsm = output_dir / "test_workbook.xlsm"
 
@@ -94,7 +141,9 @@ def main():
     inject_vba(None, vba_code, output_xlsm)
 
     # Create Win32 API VBA Excel file
-    print("\n=== Creating Win32 API VBA Excel file ===")
+    print("\n" + "=" * 50)
+    print("Creating Win32 API VBA Excel file")
+    print("=" * 50)
     win32_vba_path = project_root / "vba" / "win32api_module.bas"
     win32_output_xlsm = output_dir / "win32api_workbook.xlsm"
 
@@ -103,6 +152,21 @@ def main():
         create_win32api_excel(win32_output_xlsm, win32_vba_code)
     else:
         print(f"Win32 API VBA file not found: {win32_vba_path}")
+
+    # Verify created files
+    print("\n" + "=" * 50)
+    print("Verification Results")
+    print("=" * 50)
+    verify_vba_in_file(output_xlsm)
+    verify_vba_in_file(win32_output_xlsm)
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("Summary")
+    print("=" * 50)
+    for f in output_dir.iterdir():
+        if f.suffix == ".xlsm":
+            print(f"  {f.name}: {f.stat().st_size} bytes")
 
     print("\nDone!")
     return 0
