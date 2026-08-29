@@ -7,9 +7,10 @@ pyOpenVBAを使用してExcelファイルのVBAを操作し、GitHub ActionsのW
 このリポジトリは以下の検証を行います：
 
 1. **pyOpenVBA**: PythonからExcelファイルのVBAマクロを読み書き
-2. **LibreOffice**: CIでExcel/VBAファイルを処理（変換・マクロ実行）
+2. **LibreOffice UNO API**: CIでVBAマクロを実際に実行して動作確認
 3. **Win32 API**: VBAからWindows APIを呼び出すコードの検証
 4. **GitHub Actions**: Windows/Ubuntu/macOSでのクロスプラットフォームテスト
+5. **CIキャッシュ**: LibreOfficeインストールのキャッシュによる高速化
 
 ## 必要要件
 
@@ -85,8 +86,33 @@ python scripts/run_vba_libreoffice.py
 CIワークフローでは以下を実行します：
 
 1. **pyOpenVBAテスト**: 複数OS・PythonバージョンでのpyOpenVBAテスト
-2. **LibreOffice Windowsテスト**: Windows RunnerでLibreOfficeをインストールしてVBAファイルを処理
-3. **LibreOffice Ubuntuテスト**: Ubuntu RunnerでLibreOfficeをインストールしてVBAファイルを処理
+2. **LibreOffice Windowsテスト**: Windows RunnerでLibreOfficeをインストールしてVBAマクロを実行
+3. **LibreOffice Ubuntuテスト**: Ubuntu RunnerでLibreOfficeをインストールしてVBAマクロを実行
+
+### LibreOfficeキャッシュ
+
+CIの実行時間短縮のため、LibreOfficeのインストールをキャッシュしています：
+
+- **Windows**: `actions/cache@v4` で `C:\Program Files\LibreOffice` をキャッシュ
+- **Ubuntu**: `awalsh128/cache-apt-pkgs-action` でaptパッケージをキャッシュ
+
+初回実行時にキャッシュが保存され、2回目以降はインストールをスキップします。
+
+### VBAマクロ実行テスト
+
+LibreOffice UNO APIを使用して、実際にVBAマクロを実行し動作確認を行います：
+
+```
+--- Testing: test_workbook.xlsm ---
+VBA Modules found: ['Module1']
+MACRO EXECUTED: AddNumbers(10,20) = 30
+CELL WRITE TEST: PASS (wrote to A1)
+MACRO TEST: PASS
+```
+
+実行されるテスト：
+- `AddNumbers(10, 20)` 関数の実行と結果検証（期待値: 30）
+- セルへの書き込みテスト
 
 ## Win32 API VBAモジュール
 
@@ -105,6 +131,34 @@ CIワークフローでは以下を実行します：
 
 - Win32 APIはWindows専用のため、LibreOffice（Linux/macOS）では動作しません
 - 64bit/32bit両対応の`PtrSafe`宣言を使用しています
+- CIではVBAコードの注入確認のみ行い、Win32 APIの実行はスキップされます
+
+## CI出力例
+
+CIログでは以下のような詳細な検証結果が表示されます：
+
+```
+=== VBA Verification (via pyOpenVBA) ===
+
+--- Verifying: test_workbook.xlsm ---
+  File size: 10240 bytes
+  Modules: ['Module1']
+
+  [Module1] (15 lines)
+    Functions/Subs: 2
+    Preview:
+      ' Sample VBA Module for testing
+      Option Explicit
+      Public Function AddNumbers(a As Long, b As Long) As Long
+      ...
+
+=== LibreOffice VBA Macro Test ===
+
+--- Testing: test_workbook.xlsm ---
+VBA Modules found: ['Module1']
+MACRO EXECUTED: AddNumbers(10,20) = 30
+MACRO TEST: PASS
+```
 
 ## 参考リンク
 
