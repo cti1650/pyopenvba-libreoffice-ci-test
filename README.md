@@ -8,7 +8,8 @@ pyOpenVBAを使用してExcelファイルのVBAを操作し、GitHub ActionsのW
 
 1. **pyOpenVBA**: PythonからExcelファイルのVBAマクロを読み書き
 2. **LibreOffice**: CIでExcel/VBAファイルを処理（変換・マクロ実行）
-3. **GitHub Actions**: Windows/Ubuntu/macOSでのクロスプラットフォームテスト
+3. **Win32 API**: VBAからWindows APIを呼び出すコードの検証
+4. **GitHub Actions**: Windows/Ubuntu/macOSでのクロスプラットフォームテスト
 
 ## 必要要件
 
@@ -71,7 +72,8 @@ python scripts/run_vba_libreoffice.py
 │   ├── inject_vba.py             # VBA注入
 │   └── run_vba_libreoffice.py    # LibreOffice連携
 ├── vba/
-│   └── sample_module.bas         # サンプルVBAコード
+│   ├── sample_module.bas         # サンプルVBAコード
+│   └── win32api_module.bas       # Win32 API呼び出しVBAコード
 ├── tests/
 │   └── test_vba.py               # テストスクリプト
 ├── requirements.txt
@@ -85,6 +87,24 @@ CIワークフローでは以下を実行します：
 1. **pyOpenVBAテスト**: 複数OS・PythonバージョンでのpyOpenVBAテスト
 2. **LibreOffice Windowsテスト**: Windows RunnerでLibreOfficeをインストールしてVBAファイルを処理
 3. **LibreOffice Ubuntuテスト**: Ubuntu RunnerでLibreOfficeをインストールしてVBAファイルを処理
+
+## Win32 API VBAモジュール
+
+`vba/win32api_module.bas` には以下のWindows API呼び出しが含まれています：
+
+| API関数 | DLL | 説明 |
+|---------|-----|------|
+| `GetComputerNameA` | kernel32 | コンピュータ名を取得 |
+| `GetUserNameA` | advapi32 | ユーザー名を取得 |
+| `GetTickCount` | kernel32 | システム起動からの経過時間(ms) |
+| `GetSystemMetrics` | user32 | 画面解像度などのシステム情報 |
+| `GetTempPathA` | kernel32 | 一時フォルダのパス |
+| `Sleep` | kernel32 | 処理を指定ミリ秒停止 |
+
+### 注意事項
+
+- Win32 APIはWindows専用のため、LibreOffice（Linux/macOS）では動作しません
+- 64bit/32bit両対応の`PtrSafe`宣言を使用しています
 
 ## 参考リンク
 

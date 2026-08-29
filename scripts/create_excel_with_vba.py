@@ -50,27 +50,61 @@ def inject_vba(xlsx_path: Path, vba_code: str, output_path: Path) -> None:
     print(f"Created Excel file with VBA: {output_path}")
 
 
+def read_vba_file(vba_path: Path) -> str:
+    """Read VBA file and remove Attribute line if present."""
+    vba_code = vba_path.read_text(encoding="utf-8")
+    lines = vba_code.split("\n")
+    if lines[0].startswith("Attribute VB_Name"):
+        vba_code = "\n".join(lines[1:])
+    return vba_code
+
+
+def create_win32api_excel(output_path: Path, vba_code: str) -> None:
+    """Create Excel file with Win32 API VBA module."""
+    with ExcelFile.create_new(str(output_path)) as wb:
+        modules = wb.module_names()
+        print(f"Available modules for Win32 API file: {modules}")
+
+        try:
+            if "Module1" in modules:
+                wb.set_module("Module1", vba_code)
+                print("Updated Module1 with Win32 API code")
+            else:
+                wb.set_module("Win32ApiModule", vba_code)
+                print("Created Win32ApiModule")
+        except KeyError as e:
+            print(f"Warning: Could not set Win32 API module: {e}")
+
+        wb.save()
+    print(f"Created Win32 API Excel file: {output_path}")
+
+
 def main():
     # Paths
     project_root = Path(__file__).parent.parent
     output_dir = project_root / "output"
     output_dir.mkdir(exist_ok=True)
 
+    # Create basic VBA Excel file
+    print("=== Creating basic VBA Excel file ===")
     vba_path = project_root / "vba" / "sample_module.bas"
     output_xlsm = output_dir / "test_workbook.xlsm"
 
-    # Read VBA code
-    vba_code = vba_path.read_text(encoding="utf-8")
-
-    # Remove Attribute line if present (pyOpenVBA handles this)
-    lines = vba_code.split("\n")
-    if lines[0].startswith("Attribute VB_Name"):
-        vba_code = "\n".join(lines[1:])
-
-    # Create Excel with VBA
+    vba_code = read_vba_file(vba_path)
     inject_vba(None, vba_code, output_xlsm)
 
-    print("Done!")
+    # Create Win32 API VBA Excel file
+    print("\n=== Creating Win32 API VBA Excel file ===")
+    win32_vba_path = project_root / "vba" / "win32api_module.bas"
+    win32_output_xlsm = output_dir / "win32api_workbook.xlsm"
+
+    if win32_vba_path.exists():
+        win32_vba_code = read_vba_file(win32_vba_path)
+        create_win32api_excel(win32_output_xlsm, win32_vba_code)
+    else:
+        print(f"Win32 API VBA file not found: {win32_vba_path}")
+
+    print("\nDone!")
     return 0
 
 
