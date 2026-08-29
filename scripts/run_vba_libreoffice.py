@@ -505,14 +505,23 @@ def main():
     for xlsm_file in output_dir.glob("*.xlsm"):
         verify_vba_in_file(xlsm_file)
 
-    # Run VBA macro execution test
+    # Run VBA macro execution test for all xlsm files
     print("\n" + "=" * 50)
     print("VBA Macro Execution Test")
     print("=" * 50)
-    macro_result = run_vba_macro_test(test_xlsm, output_dir)
-    print(f"\nMacro test result: {'SUCCESS' if macro_result['success'] else 'FAILED'}")
-    for msg in macro_result.get("messages", []):
-        print(f"  {msg}")
+
+    all_success = True
+    for xlsm_file in sorted(output_dir.glob("*.xlsm")):
+        print(f"\n--- Testing: {xlsm_file.name} ---")
+        macro_result = run_vba_macro_test(xlsm_file, output_dir)
+        success = macro_result.get("success", False)
+        all_success = all_success and success
+        print(f"Result: {'SUCCESS' if success else 'FAILED'}")
+        for msg in macro_result.get("messages", []):
+            print(f"  {msg}")
+
+    print(f"\n{'=' * 50}")
+    print(f"Overall Macro Test: {'ALL PASSED' if all_success else 'SOME FAILED'}")
 
     # Convert to ODS (LibreOffice native format)
     print(f"\nConverting {test_xlsm} to ODS format...")
