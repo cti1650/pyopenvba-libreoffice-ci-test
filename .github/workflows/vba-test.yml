@@ -90,6 +90,7 @@ jobs:
       - name: Run LibreOffice VBA test
         run: |
           python scripts/run_vba_libreoffice.py
+        timeout-minutes: 2
         continue-on-error: true
 
       - name: Convert XLSM to ODS using LibreOffice
@@ -102,6 +103,7 @@ jobs:
             Get-ChildItem output
           }
         shell: powershell
+        timeout-minutes: 2
         continue-on-error: true
 
       - name: Upload artifacts
@@ -147,11 +149,12 @@ jobs:
       - name: Run LibreOffice VBA test
         run: |
           python scripts/run_vba_libreoffice.py
+        timeout-minutes: 2
         continue-on-error: true
 
       - name: Convert XLSM to ODS using LibreOffice
         run: |
-          soffice --headless --convert-to ods --outdir output output/test_workbook.xlsm || true
+          timeout 60 soffice --headless --convert-to ods --outdir output output/test_workbook.xlsm || true
           ls -la output/
 
       - name: Upload artifacts
