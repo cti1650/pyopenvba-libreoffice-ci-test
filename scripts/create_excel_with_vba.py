@@ -30,7 +30,22 @@ def inject_vba(xlsx_path: Path, vba_code: str, output_path: Path) -> None:
     """Inject VBA code into Excel file and save as .xlsm."""
     # pyOpenVBA can create a new xlsm file
     with ExcelFile.create_new(str(output_path)) as wb:
-        wb.set_module("SampleModule", vba_code)
+        # Get existing modules (new files have default modules)
+        modules = wb.module_names()
+        print(f"Available modules: {modules}")
+
+        # Update Module1 if it exists, otherwise try creating new
+        try:
+            if "Module1" in modules:
+                wb.set_module("Module1", vba_code)
+                print("Updated Module1 with VBA code")
+            else:
+                wb.set_module("SampleModule", vba_code)
+                print("Created SampleModule with VBA code")
+        except KeyError as e:
+            print(f"Warning: Could not set module: {e}")
+            print("Saving file with default modules only")
+
         wb.save()
     print(f"Created Excel file with VBA: {output_path}")
 
