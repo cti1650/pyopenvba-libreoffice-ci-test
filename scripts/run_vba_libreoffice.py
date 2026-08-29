@@ -9,6 +9,8 @@ import sys
 import time
 from pathlib import Path
 
+from pyopenvba import ExcelFile
+
 
 def find_libreoffice():
     """Find LibreOffice executable path."""
@@ -137,6 +139,51 @@ def verify_libreoffice():
     return True
 
 
+def verify_vba_in_file(xlsm_path: Path) -> None:
+    """Verify VBA code was injected and display summary."""
+    print(f"\n--- Verifying: {xlsm_path.name} ---")
+
+    if not xlsm_path.exists():
+        print(f"  ERROR: File not found")
+        return
+
+    print(f"  File size: {xlsm_path.stat().st_size} bytes")
+
+    try:
+        with ExcelFile(str(xlsm_path)) as wb:
+            modules = wb.module_names()
+            print(f"  Modules: {modules}")
+
+            for module_name in modules:
+                try:
+                    source = wb.get_module(module_name)
+                    lines = source.strip().split("\n")
+                    print(f"\n  [{module_name}] ({len(lines)} lines)")
+
+                    # Check for Win32 API declarations
+                    declare_count = sum(1 for line in lines if "Declare" in line)
+                    function_count = sum(1 for line in lines if line.strip().startswith(("Public Function", "Public Sub", "Private Function", "Private Sub")))
+
+                    if declare_count > 0:
+                        print(f"    Win32 API Declarations: {declare_count}")
+                    if function_count > 0:
+                        print(f"    Functions/Subs: {function_count}")
+
+                    # Show first few lines
+                    print("    Preview:")
+                    for line in lines[:5]:
+                        if line.strip():
+                            print(f"      {line[:60]}{'...' if len(line) > 60 else ''}")
+                    if len(lines) > 5:
+                        print(f"      ... ({len(lines) - 5} more lines)")
+
+                except Exception as e:
+                    print(f"    Could not read: {e}")
+
+    except Exception as e:
+        print(f"  ERROR reading file: {e}")
+
+
 def main():
     print("=== LibreOffice VBA Test ===\n")
     print(f"Platform: {sys.platform}")
@@ -157,6 +204,14 @@ def main():
 
     print(f"\nTest file found: {test_xlsm}")
     print(f"File size: {test_xlsm.stat().st_size} bytes")
+
+    # Verify VBA in all xlsm files
+    print("\n" + "=" * 50)
+    print("VBA Verification Results")
+    print("=" * 50)
+    output_dir = project_root / "output"
+    for xlsm_file in output_dir.glob("*.xlsm"):
+        verify_vba_in_file(xlsm_file)
 
     # Convert to ODS (LibreOffice native format)
     print(f"\nConverting {test_xlsm} to ODS format...")
