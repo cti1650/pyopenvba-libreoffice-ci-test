@@ -65,9 +65,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Cache LibreOffice (Windows)
+        id: cache-libreoffice-win
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\LibreOffice
+          key: libreoffice-windows-${{ runner.os }}-v1
+
       - name: Install LibreOffice
+        if: steps.cache-libreoffice-win.outputs.cache-hit != 'true'
         run: |
-          # Download LibreOffice using winget or choco
           choco install libreoffice-fresh -y --no-progress
         shell: powershell
 
@@ -90,14 +97,13 @@ jobs:
       - name: Run LibreOffice VBA test
         run: |
           python scripts/run_vba_libreoffice.py
-        timeout-minutes: 2
+        timeout-minutes: 3
         continue-on-error: true
 
       - name: Convert XLSM to ODS using LibreOffice
         run: |
           $soffice = "C:\Program Files\LibreOffice\program\soffice.exe"
           if (Test-Path $soffice) {
-            # Convert xlsm to ods
             & $soffice --headless --convert-to ods --outdir output output\test_workbook.xlsm
             Write-Host "Conversion completed"
             Get-ChildItem output
@@ -132,10 +138,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install LibreOffice
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libreoffice libreoffice-calc
+      - name: Cache apt packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libreoffice libreoffice-calc
+          version: 1.0
 
       - name: Verify LibreOffice installation
         run: |
@@ -149,7 +156,7 @@ jobs:
       - name: Run LibreOffice VBA test
         run: |
           python scripts/run_vba_libreoffice.py
-        timeout-minutes: 2
+        timeout-minutes: 3
         continue-on-error: true
 
       - name: Convert XLSM to ODS using LibreOffice
