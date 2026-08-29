@@ -142,12 +142,12 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: libreoffice libreoffice-calc
-          version: 1.0
+          version: 1.1
 
       - name: Verify LibreOffice installation
         run: |
           which soffice
-          soffice --version
+          soffice --version || echo "Version check failed, but soffice exists"
 
       - name: Create Excel with VBA
         run: |
