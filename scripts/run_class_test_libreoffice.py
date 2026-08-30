@@ -53,15 +53,29 @@ def _can_import_uno(python_exe: str, extra_env: dict[str, str]) -> bool:
     """Actually try `import uno` -- guessing from paths is not reliable enough."""
     env = os.environ.copy()
     env.update(extra_env)
+    tag = f"{python_exe}{' +env' if extra_env else ''}"
     try:
-        return subprocess.run(
+        done = subprocess.run(
             [python_exe, "-c", "import uno"],
             capture_output=True,
-            timeout=60,
+            text=True,
+            timeout=30,
             env=env,
-        ).returncode == 0
-    except (OSError, subprocess.SubprocessError):
+        )
+    except subprocess.TimeoutExpired:
+        print(f"  uno check: {tag} -> timed out")
         return False
+    except OSError as exc:
+        print(f"  uno check: {tag} -> {type(exc).__name__}")
+        return False
+
+    if done.returncode == 0:
+        print(f"  uno check: {tag} -> OK")
+        return True
+
+    reason = (done.stderr or "").strip().splitlines()
+    print(f"  uno check: {tag} -> {reason[-1][:120] if reason else 'failed'}")
+    return False
 
 
 def find_uno_python(soffice: str) -> tuple[str, dict[str, str]] | tuple[None, None]:
@@ -126,9 +140,12 @@ def wait_for_port(port: int, timeout: float) -> bool:
 def start_soffice(soffice: str, port: int, profile_dir: Path) -> subprocess.Popen:
     """Launch headless soffice with an isolated user profile."""
     profile_dir.mkdir(parents=True, exist_ok=True)
+    # Must be a real file URL. Naive f"file://{path}" yields "file://C:\..." on
+    # Windows, which soffice rejects, and it then never opens the UNO socket.
+    profile_url = profile_dir.resolve().as_uri()
     cmd = [
         soffice,
-        f"-env:UserInstallation=file://{profile_dir}",
+        f"-env:UserInstallation={profile_url}",
         "--headless",
         "--invisible",
         "--nologo",
@@ -198,6 +215,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # CI runs this through a shell that is not a tty, so Python block-buffers
+    # stdout. A step that then hits the job timeout gets killed with its whole
+    # log still in the buffer -- which is indistinguishable from hanging before
+    # the first print. Line buffering keeps the progress log truthful.
+    sys.stdout.reconfigure(line_buffering=True)
+
     workbook = Path(args.workbook)
     output_dir = workbook.parent
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -219,13 +242,16 @@ def main() -> int:
     print(f"soffice: {soffice}")
     try:
         version = subprocess.run(
-            [soffice, "--version"], capture_output=True, text=True, timeout=60
+            [soffice, "--version"], capture_output=True, text=True, timeout=20
         ).stdout.strip()
-        if version:
-            print(f"version: {version}")
+        print(f"version: {version or '(no output)'}")
+    except subprocess.TimeoutExpired:
+        # soffice.exe --version is known to hang on Windows in some setups.
+        print("version: (--version timed out; continuing)")
     except (OSError, subprocess.SubprocessError):
-        pass
+        print("version: (unavailable)")
 
+    print("Looking for an interpreter that can import uno...")
     python_exe, extra_env = find_uno_python(soffice)
     if python_exe is None:
         print("No interpreter on this machine can 'import uno'.")
@@ -239,17 +265,26 @@ def main() -> int:
 
     proc = start_soffice(soffice, args.port, profile_dir)
     try:
+        print(f"Waiting up to {args.startup_timeout}s for the UNO socket...")
         if not wait_for_port(args.port, args.startup_timeout):
             print(f"soffice did not accept connections within {args.startup_timeout}s")
-            stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+            # Never plain read() here: soffice does not exit on its own, so the
+            # read would block until the CI job timeout kills the whole step.
+            proc.terminate()
+            try:
+                _, stderr = proc.communicate(timeout=15)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                _, stderr = proc.communicate(timeout=15)
             if stderr:
-                print(f"stderr: {stderr[:500]}")
+                print(f"soffice stderr: {stderr.decode(errors='replace')[:800]}")
             return 1
         print(f"soffice listening on port {args.port}")
 
         env = os.environ.copy()
         env.update(extra_env)
 
+        print(f"Running probe (timeout {args.probe_timeout}s)...")
         try:
             completed = subprocess.run(
                 [python_exe, str(probe), str(workbook.absolute()),

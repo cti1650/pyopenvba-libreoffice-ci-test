@@ -222,8 +222,8 @@ jobs:
         run: python scripts/create_class_test_excel.py
 
       - name: Probe VBA class-module support
-        run: python scripts/run_class_test_libreoffice.py
-        timeout-minutes: 10
+        run: python -u scripts/run_class_test_libreoffice.py
+        timeout-minutes: 15
 
       - name: Upload results
         if: always()
