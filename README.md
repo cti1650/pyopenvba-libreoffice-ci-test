@@ -118,12 +118,17 @@ CIワークフローでは以下を実行します：
 
 ### LibreOfficeキャッシュ
 
-CIの実行時間短縮のため、LibreOfficeのインストールをキャッシュしています：
+- **Windows**: `actions/cache@v4` で `C:\Program Files\LibreOffice` をキャッシュしています。キャッシュヒット時も正常に動作することを確認済みです。
+- **Ubuntu**: **キャッシュしていません**（意図的）。
 
-- **Windows**: `actions/cache@v4` で `C:\Program Files\LibreOffice` をキャッシュ
-- **Ubuntu**: `awalsh128/cache-apt-pkgs-action` でaptパッケージをキャッシュ
+Ubuntuで `awalsh128/cache-apt-pkgs-action` を使うと、復元されたLibreOfficeが正常に動作しません。段階的に2つの問題が出ます：
 
-初回実行時にキャッシュが保存され、2回目以降はインストールをスキップします。
+1. `execute_install_scripts` なし → dpkgのpostinstが走らず、`soffice --version` が無出力・起動時に `Unspecified Application Error`
+2. `execute_install_scripts: true` を付けても → `--version` は通るが、`.xlsm` の読み込みが `document did not load` で失敗
+
+いずれも**初回（キャッシュミス）は成功し、2回目以降だけ壊れる**ため気付きにくく、さらに後続ステップが `continue-on-error` だとジョブはgreenのままになります。素の `apt-get install` は1〜2分ですが、「VBAの対応状況を測っている」のか「何も測れていない」のかの差になるため、キャッシュを外しています。
+
+同じ理由で、`run_class_test_libreoffice.py` はテストが1件も実行されなかった場合（`0/0`）に終了コード1を返します。個々のVBA機能の失敗は「結果」ですが、結果がゼロ件なのは検証基盤の故障だからです。
 
 ### VBAマクロ実行テスト
 
@@ -239,8 +244,8 @@ python scripts/run_class_test_libreoffice.py
 
 環境依存の落とし穴も2点あります。
 
-3. **Ubuntu: aptキャッシュは `execute_install_scripts: true` が必須**
-   `cache-apt-pkgs-action` はキャッシュ復元時にdpkgのpostinstを実行しないため、LibreOfficeがPATHには居るのに起動できない状態になります（`soffice --version` が無出力、起動時に `Unspecified Application Error`）。初回（キャッシュミス）は通り、2回目（キャッシュヒット）から壊れるため気付きにくい挙動です。CIでは復元後に `soffice --version` を検証して即失敗させています。
+3. **Ubuntu: aptキャッシュからのLibreOfficeは使えない**
+   詳細は上の「LibreOfficeキャッシュ」を参照。復元されたLibreOfficeは起動できないか、起動できても文書を開けません。CIではキャッシュを使わず素の `apt-get install` にしています。
 
 4. **Windows: `soffice.exe --version` が返らないことがある**
    バージョン取得は20秒で打ち切って続行します。UNO用のPythonは `C:\Program Files\LibreOffice\program\python.exe`（バンドル版）が使われます。

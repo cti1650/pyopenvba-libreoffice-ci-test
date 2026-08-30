@@ -332,6 +332,14 @@ def main() -> int:
     print(f"Full output: {result_path}")
     print("=" * 60)
 
+    # An empty matrix means the harness broke (LibreOffice could not open the
+    # workbook, the bridge would not install, ...). Individual VBA features
+    # failing is a result; producing no results at all is not -- never let that
+    # exit 0, or a dead LibreOffice reads as a passing test run.
+    if total == 0:
+        print("No tests ran. This is a harness failure, not a VBA compatibility result.")
+        return 1
+
     if args.strict and passed != total:
         return 1
     return 0
