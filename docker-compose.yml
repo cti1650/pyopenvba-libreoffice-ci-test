@@ -1,0 +1,43 @@
+# Local LibreOffice VBA testing without installing LibreOffice on the host.
+#
+#   docker compose build
+#   docker compose run --rm class-test    # build workbook + probe VBA classes
+#   docker compose run --rm build         # build the .xlsm files only
+#   docker compose run --rm convert       # convert output/*.xlsm to .ods
+#   docker compose run --rm shell         # poke around interactively
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  image: pyopenvba-libreoffice-test
+  working_dir: /work
+  volumes:
+    # Source is mounted read-only so edits on the host take effect without a
+    # rebuild; output/ is writable so results land back on the host.
+    - ./scripts:/work/scripts:ro
+    - ./vba:/work/vba:ro
+    - ./tests:/work/tests:ro
+    - ./docker:/work/docker:ro
+    - ./output:/work/output
+
+services:
+  class-test:
+    <<: *common
+    command: ["bash", "docker/run-class-test.sh"]
+
+  build:
+    <<: *common
+    command: ["python3", "scripts/create_class_test_excel.py"]
+
+  convert:
+    <<: *common
+    entrypoint: ["bash", "docker/convert.sh"]
+    command: []
+
+  shell:
+    <<: *common
+    entrypoint: ["/bin/bash"]
+    command: []
+    stdin_open: true
+    tty: true
