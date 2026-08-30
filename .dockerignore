@@ -1,0 +1,9 @@
+.git
+.github
+output
+venv
+.venv
+__pycache__
+*.pyc
+.DS_Store
+README.md

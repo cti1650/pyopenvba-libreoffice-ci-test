@@ -138,16 +138,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Cache apt packages
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libreoffice libreoffice-calc
-          version: 1.1
+      # Not cached -- see the note in test-class-modules. A restored
+      # LibreOffice cannot open documents, and since every step below is
+      # continue-on-error / "|| true", this job would go green having
+      # exercised nothing at all.
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-calc
 
       - name: Verify LibreOffice installation
         run: |
           which soffice
-          soffice --version || echo "Version check failed, but soffice exists"
+          version=$(timeout 60 soffice --version || true)
+          echo "soffice --version: '${version}'"
+          if [ -z "${version}" ]; then
+            echo "::error::LibreOffice is installed but not runnable."
+            exit 1
+          fi
 
       - name: Create Excel with VBA
         run: |
@@ -169,4 +177,84 @@ jobs:
         with:
           name: libreoffice-output-ubuntu
           path: output/
+          retention-days: 7
+
+  test-class-modules:
+    name: VBA class modules in LibreOffice (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: test-pyopenvba
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # python3-uno is what lets the probe talk to LibreOffice over UNO.
+      # Note that setup-python's interpreter has no uno; the probe finds and
+      # verifies the system python3 (Linux) or LibreOffice's bundled python
+      # (Windows) on its own.
+      # Deliberately NOT cached. cache-apt-pkgs-action restores a LibreOffice
+      # that cannot be trusted: without execute_install_scripts it will not
+      # even start, and with it, `soffice --version` works but loading an
+      # .xlsm still fails ("document did not load"), which silently produces
+      # an empty result matrix. A real apt install costs ~1-2 minutes and is
+      # the difference between measuring VBA support and measuring nothing.
+      - name: Install LibreOffice (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-calc python3-uno
+
+      # Fail here rather than 90s later inside the probe.
+      - name: Verify LibreOffice actually runs (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          version=$(timeout 60 soffice --version || true)
+          echo "soffice --version: '${version}'"
+          if [ -z "${version}" ]; then
+            echo "::error::LibreOffice is installed but not runnable."
+            exit 1
+          fi
+
+      - name: Cache LibreOffice (Windows)
+        if: runner.os == 'Windows'
+        id: cache-libreoffice-win
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\LibreOffice
+          key: libreoffice-windows-${{ runner.os }}-v1
+
+      - name: Install LibreOffice (Windows)
+        if: runner.os == 'Windows' && steps.cache-libreoffice-win.outputs.cache-hit != 'true'
+        run: choco install libreoffice-fresh -y --no-progress
+        shell: powershell
+
+      - name: Build class-module test workbook
+        run: python scripts/create_class_test_excel.py
+
+      - name: Probe VBA class-module support
+        run: python -u scripts/run_class_test_libreoffice.py
+        timeout-minutes: 15
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: class-module-results-${{ matrix.os }}
+          path: |
+            output/class_test_workbook.xlsm
+            output/class_test_result.json
           retention-days: 7

@@ -177,7 +177,9 @@ try:
 
     # Properties to open with VBA support
     props = (
-        PropertyValue("MacroExecutionMode", 0, 4, 0),  # Always execute macros
+        # MacroExecMode.ALWAYS_EXECUTE_NO_WARN is 9. 4 is
+        # USE_CONFIG_REJECT_CONFIRMATION, which silently runs nothing.
+        PropertyValue("MacroExecutionMode", 0, 9, 0),
         PropertyValue("Hidden", 0, True, 0),
     )
 
