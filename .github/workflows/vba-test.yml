@@ -142,12 +142,21 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: libreoffice libreoffice-calc
-          version: 1.1
+          version: 1.2
+          execute_install_scripts: true
 
+      # A cache restore without postinst leaves soffice on PATH but unable to
+      # start, and every later step here is continue-on-error / "|| true" --
+      # so the job would go green having tested nothing. Check it properly.
       - name: Verify LibreOffice installation
         run: |
           which soffice
-          soffice --version || echo "Version check failed, but soffice exists"
+          version=$(timeout 60 soffice --version || true)
+          echo "soffice --version: '${version}'"
+          if [ -z "${version}" ]; then
+            echo "::error::LibreOffice is installed but not runnable (bad apt cache restore)."
+            exit 1
+          fi
 
       - name: Create Excel with VBA
         run: |
@@ -198,12 +207,29 @@ jobs:
       # Note that setup-python's interpreter has no uno; the probe finds and
       # verifies the system python3 (Linux) or LibreOffice's bundled python
       # (Windows) on its own.
+      # execute_install_scripts is required: without it the cache restores the
+      # package files but never runs dpkg's postinst, and the resulting
+      # LibreOffice is present-but-unrunnable (`soffice --version` prints
+      # nothing, startup dies with "Unspecified Application Error").
       - name: Install LibreOffice (Ubuntu)
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: libreoffice libreoffice-calc python3-uno
-          version: 1.1
+          version: 1.2
+          execute_install_scripts: true
+
+      # Fail loudly here rather than 90s later inside the probe, and never let
+      # a broken install masquerade as a passing test.
+      - name: Verify LibreOffice actually runs (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          version=$(timeout 60 soffice --version || true)
+          echo "soffice --version: '${version}'"
+          if [ -z "${version}" ]; then
+            echo "::error::LibreOffice is installed but not runnable (bad apt cache restore)."
+            exit 1
+          fi
 
       - name: Cache LibreOffice (Windows)
         if: runner.os == 'Windows'

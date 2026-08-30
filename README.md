@@ -183,7 +183,15 @@ VBEからエクスポートした `VERSION 1.0 CLASS` 形式の `.cls` はその
 
 ### LibreOffice側：実測結果
 
-`vba/class_test/` のVBAをLibreOfficeで実行した結果です（Docker / LibreOffice 7.4、Debian bookworm）。
+`vba/class_test/` のVBAをLibreOfficeで実行した結果です。**3環境すべてで 10/16 PASS、失敗項目も完全に一致**しました。
+
+| 環境 | LibreOffice | 結果 |
+|------|-------------|------|
+| Docker（Debian bookworm） | 7.4.7.2 | 10/16 |
+| GitHub Actions（ubuntu-latest） | 24.2.7.2 | 10/16 |
+| GitHub Actions（windows-latest） | choco `libreoffice-fresh` | 10/16 |
+
+7.4 から 24.2 というメジャーバージョン差、およびLinux/Windowsの違いを越えて結果が変わらないため、以下はバージョン固有の不具合ではなく**VBA互換モードの構造的な制限**と判断できます。
 
 LibreOfficeはpyOpenVBAが書いた `.cls` を**クラスモジュールとして正しく認識**します（生成されたBasicに `Option ClassModule` と `Rem Attribute VBA_ModuleType=VBAClassModule` が付く）。
 
@@ -228,6 +236,14 @@ python scripts/run_class_test_libreoffice.py
 2. **`VBAProject` ライブラリはスクリプトプロバイダから直接実行できない**
    `getScript()` は成功するのに `invoke()` が既定値を返し、コードが走りません。中身に関係なく、自明な `Function VbEcho() As String` を `VBAProject` に直接入れても空でした。一方、同じ関数をドキュメントの `Standard` ライブラリに入れると正常に動きます。
    そのため、ドキュメントの `Standard` ライブラリに `VBAProject.<Module>.<Function>()` を呼ぶブリッジモジュールを注入して実行しています。
+
+環境依存の落とし穴も2点あります。
+
+3. **Ubuntu: aptキャッシュは `execute_install_scripts: true` が必須**
+   `cache-apt-pkgs-action` はキャッシュ復元時にdpkgのpostinstを実行しないため、LibreOfficeがPATHには居るのに起動できない状態になります（`soffice --version` が無出力、起動時に `Unspecified Application Error`）。初回（キャッシュミス）は通り、2回目（キャッシュヒット）から壊れるため気付きにくい挙動です。CIでは復元後に `soffice --version` を検証して即失敗させています。
+
+4. **Windows: `soffice.exe --version` が返らないことがある**
+   バージョン取得は20秒で打ち切って続行します。UNO用のPythonは `C:\Program Files\LibreOffice\program\python.exe`（バンドル版）が使われます。
 
 ## CI出力例
 
